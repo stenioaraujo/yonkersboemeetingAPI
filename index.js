@@ -1,6 +1,7 @@
 var querystring = require("querystring");
 var http = require("http");
 var cheerio = require("cheerio");
+var CACHE;
 
 var HOST = "206.155.75.42";
 var ACTUAL_YEAR = new Date().getFullYear();
@@ -164,43 +165,73 @@ var navigate = function(html, callback, links, dir) {
 	}
 };
 
-http.request("http://"+HOST+"/calendar.aspx", function(res) {	
-	getData(res, function(data) {
-		getRegexInfo(data, function(links) {
-			navigate(data, function(links) {
+var updateCache = function (callback) {
+	http.request("http://"+HOST+"/calendar.aspx", function(res) {	
+		getData(res, function(data) {
+			getRegexInfo(data, function(links) {
 				navigate(data, function(links) {
-					var keys = Object.keys(links);
-					keys.sort();
-					
-					var sortedLinks = [];					
-					for (var i = 0; i < keys.length; i++) {
-						for (var j = 0; j < links[keys[i]].length; j++) {
-							sortedLinks.push(links[keys[i]][j]);
+					navigate(data, function(links) {
+						var keys = Object.keys(links);
+						keys.sort();
+						
+						var sortedLinks = [];					
+						for (var i = 0; i < keys.length; i++) {
+							for (var j = 0; j < links[keys[i]].length; j++) {
+								sortedLinks.push(links[keys[i]][j]);
+							}
 						}
-					}
-					
-					function loop(i, end) {
-						if (i < end) {
-							http.request("http://"+HOST+"/"+sortedLinks[i], function(res) {
-								getData(res, function(data) {
-									$ = cheerio.load(data);
-									
-									console.log("Type: " + $("#lblMtgType").text());
-									console.log("When: " + $("#lblDate").text() + " - " + $("#lblTime").text());
-									console.log("Where: " + $("#lblLocation").text());
-									if (data.match("This agenda has not been approved for public viewing")) {
-										console.log("NOT APPROVED YET");
-									}
-									console.log("--------------------------------------");
-									
-									loop(i+1, end);
-								})
-							}).end();
+						
+						var apiResult = {
+							numberEvents: sortedLinks.length,
+							events: []
 						}
-					}
-					loop(0, sortedLinks.length);
-				}, links, "next");
-			}, links, "previous");
+						
+						function loop(i, end) {
+							if (i < end) {
+								http.request("http://"+HOST+"/"+sortedLinks[i], function(res) {
+									getData(res, function(data) {
+										$ = cheerio.load(data);
+										
+										var event = {
+											type: $("#lblMtgType").text(),
+											when: {
+												day: $("#lblDate").text(),
+												time: $("#lblTime").text()
+											},
+											where: $("#lblLocation").text(),
+											approved: data.match("This agenda has not been approved for public viewing") ? false : true
+										}
+										
+										apiResult.events.push(event);
+										
+										loop(i+1, end);
+									})
+								}).end();
+							} else {
+								CACHE = apiResult;
+								if (callback)
+									callback();
+							}
+						}
+						loop(0, sortedLinks.length);
+					}, links, "next");
+				}, links, "previous");
+			});
 		});
+	}).end();
+}
+
+updateCache(function() {
+	console.log("Cache Created!");
+	
+	setInterval(function() {
+		updateCache();
+	}, 1*6*1000);
+	
+	var server = http.createServer(function(req, res) {
+		res.end(JSON.stringify(CACHE));
 	});
-}).end();
+	server.listen(3000);
+});
+
+
