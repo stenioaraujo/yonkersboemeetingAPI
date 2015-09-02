@@ -182,6 +182,7 @@ var updateCache = function (callback) {
 						}
 						
 						var apiResult = {
+							lastUpdated: new Date().toUTCString(),
 							numberEvents: sortedLinks.length,
 							events: []
 						}
@@ -232,6 +233,8 @@ updateCache(function() {
 		res.end(JSON.stringify(CACHE));
 	});
 	server.listen(3000);
+	
+	console.log("Server listening on port 3000");
 });
 
 
