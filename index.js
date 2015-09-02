@@ -226,7 +226,7 @@ updateCache(function() {
 	
 	setInterval(function() {
 		updateCache();
-	}, 1*6*1000);
+	}, 30*60*1000);
 	
 	var server = http.createServer(function(req, res) {
 		res.end(JSON.stringify(CACHE));
